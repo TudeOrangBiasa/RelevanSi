@@ -1,46 +1,56 @@
-// Simple stopwords list (English) - moderate set
-const englishStopwords = [
-  'a','about','above','after','again','against','all','am','an','and','any','are','as','at',
-  'be','because','been','before','being','below','between','both','but','by','can','cannot',
-  'could','did','do','does','doing','down','during','each','few','for','from','further',
-  'had','has','have','having','he','her','here','hers','him','his','how','i','if','in','into',
-  'is','it','its','me','more','most','my','no','nor','not','of','off','on','once','only','or',
-  'other','our','out','over','own','same','she','should','so','some','such','than','that','the',
-  'their','them','then','there','these','they','this','those','through','to','too','under','until',
-  'up','very','was','we','were','what','when','where','which','while','who','will','with','you'
-]
+import { ref, computed } from 'vue'
+import * as stopwords from 'stopwords-iso'
 
-// Simple stopwords list (Indonesian) - moderate set
-const indonesianStopwords = [
-  'yang','di','ke','dari','pada','untuk','dengan','adalah','ini','itu','dan','atau','juga',
-  'sebagai','dalam','oleh','kami','kita','anda','dia','sebagai','ke','sebuah','seumur','selama',
-  'sering','saat','tetapi','karena','oleh','adalah','apa','siapa','bagaimana','mengapa','atau'
-]
+const stopwordsObj = (stopwords as any) || {}
+const indonesianStopwords = new Set<string>((stopwordsObj['id'] as string[]) || [])
+const englishStopwords = new Set<string>((stopwordsObj['en'] as string[]) || [])
 
-// very small stemmer heuristics
-function stemmerEn(word: string): string {
-  return word.replace(/(ing|edly|edly|edly|edly|edly|ly|ed|ious|ies|ive|es|s)$/, '')
-}
-function stemmerId(word: string): string {
-  return word.replace(/(kan|an|i|lah|kah|nya|ku|mu)$/, '')
+// small, dependency-free stemmer to avoid importing `natural`
+function simpleStem(word: string): string {
+  if (!word || word.length <= 3) return word
+  return word.replace(/(ingly|edly|ingly|edly|ing|ied|ly|ed|es|s)$/i, '')
 }
 
-export function preprocess(text: string, language: 'en' | 'id' = 'en'): string {
+export function preprocess(text: string, language: 'id' | 'en' = 'id'): string {
   if (!text) return ''
-  // normalize
   let t = String(text).toLowerCase()
-  // remove punctuation (preserve spaces)
   t = t.replace(/[^\p{L}\p{N}\s]/gu, ' ')
-  // collapse spaces
   t = t.replace(/\s+/g, ' ').trim()
   if (!t) return ''
 
   const tokens = t.split(' ').filter(Boolean)
+  if (language === 'id') {
+    const filtered = tokens.filter(tok => !indonesianStopwords.has(tok))
+    return filtered.join(' ')
+  } else {
+    const filtered = tokens.filter(tok => !englishStopwords.has(tok))
+    const stemmed = filtered.map(tok => simpleStem(tok))
+    return stemmed.join(' ')
+  }
+}
 
-  const stopwords = language === 'id' ? indonesianStopwords : englishStopwords
-  const filtered = tokens.filter(tok => !stopwords.includes(tok))
+export function detectLanguageFromText(sample = ''): 'id' | 'en' {
+  const text = (sample || '').toLowerCase().trim()
+  if (!text) return 'id'
 
-  const stemmed = filtered.map(tok => language === 'id' ? stemmerId(tok) : stemmerEn(tok))
+  const tokens = text.slice(0, 1000).replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean)
+  const countWords = (set: Set<string>) => tokens.reduce((c, t) => c + (set.has(t) ? 1 : 0), 0)
 
-  return stemmed.join(' ')
+  const idCount = countWords(indonesianStopwords)
+  const enCount = countWords(englishStopwords)
+  return idCount >= enCount ? 'id' : 'en'
+}
+
+export const useTextProcessor = () => {
+  const rawText = ref('')
+  const language = ref<'id' | 'en'>('id')
+
+  const processedText = computed(() => preprocess(rawText.value, language.value))
+
+  return {
+    rawText,
+    language,
+    processedText,
+    detectLanguage: detectLanguageFromText
+  }
 }

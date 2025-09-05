@@ -1,30 +1,27 @@
 # RelevanSi — Simple Document Search (Nuxt + Tailwind + Lunr/Fuse + Supabase)
 
-Summary: An Information Retrieval assignment app for building a simple search engine.  
-Uses Nuxt (Vue 3), TailwindCSS for UI, Lunr + Fuse.js for client-side retrieval, pdfjs + Mammoth for extracting text from PDF/DOCX, and Supabase for database + storage.
+Summary: A simple Information Retrieval assignment app for building a basic search engine.  
+Uses Nuxt (Vue 3), TailwindCSS for UI, Lunr + Fuse.js for client-side retrieval, and Supabase for database (tables only, no storage).
 
 ## Features
-- Upload documents (PDF / TXT / DOCX)
-- Text extraction using pdfjs / mammoth (client-side)
+- Upload documents (TXT only, no text extraction)
 - Simple preprocessing (lowercase, stopwords, light stemming)
 - Client-side indexing: Lunr (primary) + Fuse.js (fallback)
-- Supabase table `documents` stores: id, title, file_url, content, created_at, processed, metadata
+- Supabase table `documents` stores: id, title, content, created_at, processed, metadata
 - Seeder with 30 sample documents (processed = true)
 
 ## Tech stack
 - Nuxt 3
 - TailwindCSS
 - Lunr.js, Fuse.js
-- pdfjs-dist, mammoth
-- Supabase (Postgres + Storage)
+- Supabase (Postgres tables only)
 - TypeScript (SFCs with <script setup lang="ts">)
 
-## Schema (unchanged)
+## Schema
 ```ts
 export interface Document {
     id: number;
     title: string;
-    file_url: string;
     content: string;
     created_at: Date;
     processed: boolean;
@@ -33,8 +30,7 @@ export interface Document {
 ```
 
 ## Main Features
-- Upload documents (PDF / DOCX / TXT)
-- Client-side text extraction (pdfjs / mammoth)
+- Upload documents (TXT only)
 - Simple preprocessing (lowercase, stopwords, light stemming)
 - Client-side indexing (Lunr) and Fuse.js fallback
 - Supabase table documents stores content, processed flag, and metadata (word_count, excerpt, language, file_size, uploadedAt)
@@ -42,7 +38,7 @@ export interface Document {
 ## Requirements
 - Node.js >= 18
 - npm / pnpm / yarn
-- Supabase account (project, documents table, documents storage bucket)
+- Supabase account (project, documents table)
 - For running seeder: Supabase service role key (do not commit to repo)
 
 ## Installation (local)
@@ -105,22 +101,19 @@ npx ts-node ./seed/documentSeeder.ts
 
 Notes:
 - Seeder uses simple preprocessing, creates content, metadata, and sets processed: true.
-- If you rerun the seeder, it checks existing rows by file_url/title and only inserts new ones (avoids duplicates).
+- If you rerun the seeder, it checks existing rows by title and only inserts new ones (avoids duplicates).
 
 ## Upload & Processing behavior
-When a user uploads a file in the UI:
-- File is uploaded to Supabase Storage (documents bucket).
-- Text extraction runs client-side (pdfjs / mammoth).
+When a user uploads a TXT file in the UI:
+- Content is read client-side (no text extraction).
 - Preprocessing runs client-side.
 - Metadata is created (word_count, excerpt, language, file_size, uploadedAt).
-- Record is saved to documents table with processed: true (for assignment/convenience).
-
-For production/scalability: change flow so client uploads raw (processed=false) and a worker/cron (server) extracts, preprocesses, then updates content + processed=true.
+- Record is saved to documents table with processed: true.
 
 ## Troubleshooting
 Seeder error "there is no unique or exclusion constraint matching the ON CONFLICT specification":
 - Cause: upsert(..., { onConflict: [...] }) but no UNIQUE constraint on the specified column(s).
-- Solution: use insert after checking for duplicates (seeder is adjusted), or add UNIQUE constraint on file_url.
+- Solution: use insert after checking for duplicates (seeder is adjusted), or add UNIQUE constraint on title.
 
 If search page shows "No results found" even though table has data:
 - Open browser DevTools Console.
@@ -141,7 +134,7 @@ If seeder doesn't run:
 ## Repo Structure (short)
 - `app/` — Nuxt app
 - `pages/index.vue` — main UI (upload + search)
-- `composables/` — helpers: extractText, preprocessing, lunr/fuse wrappers, supabase client wrapper
+- `composables/` — helpers: preprocessing, lunr/fuse wrappers, supabase client wrapper
 - `seed/documentSeeder.ts` — seeder (30 samples)
 - `README.md` — this documentation
 
@@ -149,8 +142,6 @@ If seeder doesn't run:
 - Nuxt 3: https://nuxt.com
 - Lunr.js: https://lunrjs.com
 - Fuse.js: https://fusejs.io
-- pdfjs-dist: https://mozilla.github.io/pdf.js/
-- mammoth: https://github.com/mwilliamson/mammoth.js
 - Supabase: https://supabase.com
 
 ## Quick Commands
