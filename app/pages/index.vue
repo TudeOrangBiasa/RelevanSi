@@ -184,9 +184,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSupabaseClient } from '~/composables/supabase'
-import { createLunrIndex } from '~/composables/lunr'
-import { createFuseIndex } from '~/composables/fuse'
-import { uploadDocument } from '~/composables/uploudDocument'
+import { preprocess, detectLanguageFromText } from '~/composables/preprocessing'
 import { navigateTo } from '#app'
 
 type Lang = 'id' | 'en'
@@ -263,20 +261,36 @@ async function loadDocuments() {
 
   docs.value = (data || []) as DocumentItem[]
 
-  try {
-    lunrIndex = createLunrIndex(docs.value)
-  } catch (e) {
-    console.error('lunr index error', e)
+  // Dynamic import of indexing functions to avoid bundling node-only deps into SSR/client bundle
+  if (typeof window !== 'undefined') {
+    try {
+      const lunrMod = await import('~/composables/lunr')
+      if (lunrMod && typeof lunrMod.createLunrIndex === 'function') {
+        lunrIndex = lunrMod.createLunrIndex(docs.value)
+      } else {
+        lunrIndex = null
+      }
+    } catch (e) {
+      console.warn('lunr index error (dynamic import)', e)
+      lunrIndex = null
+    }
+
+    try {
+      const fuseMod = await import('~/composables/fuse')
+      if (fuseMod && typeof fuseMod.createFuseIndex === 'function') {
+        fuseIndex = fuseMod.createFuseIndex(docs.value)
+      } else {
+        fuseIndex = null
+      }
+    } catch (e) {
+      console.warn('fuse index error (dynamic import)', e)
+      fuseIndex = null
+    }
+  } else {
     lunrIndex = null
-  }
-  try {
-    fuseIndex = createFuseIndex(docs.value)
-  } catch (e) {
-    console.error('fuse index error', e)
     fuseIndex = null
   }
 
-  // reset previous results (optional)
   results.value = []
 }
 
@@ -301,10 +315,15 @@ async function onUploadClick() {
   uploadStatus.value = 'Uploading & processing...'
   const loadingId = showToast('loading', 'Uploading', `Processing ${selectedFile.value.name}...`, undefined)
   try {
-    // Use composable that preserves content_raw and writes processed text into content
-    const inserted = await uploadDocument(selectedFile.value, supabase)
+    if (typeof window === 'undefined') {
+      throw new Error('Upload must be performed in browser')
+    }
+    const mod = await import('~/composables/uploudDocument')
+    if (!mod || typeof mod.uploadDocument !== 'function') {
+      throw new Error('uploadDocument module not available')
+    }
+    const inserted = await mod.uploadDocument(selectedFile.value, supabase)
 
-    // debug preview to ensure content_raw untouched
     console.log('uploaded document', {
       id: inserted?.id,
       title: inserted?.title,
@@ -333,30 +352,26 @@ function searchDocs() {
   searched.value = true
   const rawQuery = query.value && query.value.trim()
 
-  if (!rawQuery || rawQuery.length < 2) { // Tetap batasi panjang kueri mentah
+  if (!rawQuery || rawQuery.length < 2) {
     results.value = []
     return
   }
 
-  // --- KUNCI UTAMA ADA DI SINI ---
-  // Proses kueri pencarian menggunakan fungsi yang SAMA seperti saat upload
-  const lang = 'id' // atau deteksi bahasa dari kueri jika perlu
+  // detect language from query (safe, lightweight)
+  const lang = detectLanguageFromText(rawQuery)
   const processedQuery = preprocess(rawQuery, lang)
-  
-  // Jika setelah diproses kuerinya jadi kosong (misal: hanya berisi stopwords), hentikan.
+
   if (!processedQuery) {
     results.value = []
     return
   }
-  
-  // Sekarang, cari menggunakan kueri yang sudah diproses
+
   if (lunrIndex) {
     try {
-      // Gunakan processedQuery
       const lunrHits = lunrIndex.search(processedQuery)
       const lunrResults = lunrHits.map((r: { ref: string }) => docs.value.find(d => String(d.id) === String(r.ref))).filter(Boolean)
       if (lunrResults.length > 0) {
-        results.value = lunrResults
+        results.value = lunrResults as DocumentItem[]
         return
       }
     } catch (e) {
@@ -366,7 +381,6 @@ function searchDocs() {
 
   if (fuseIndex) {
     try {
-      // Fuse juga lebih baik mencari dengan kueri yang sudah diproses
       const fuseHits = fuseIndex.search(processedQuery)
       const fuseResults = fuseHits.map((res: { item: DocumentItem }) => res.item)
       if (fuseResults.length > 0) {
@@ -378,10 +392,9 @@ function searchDocs() {
     }
   }
 
-  // Fallback bisa mencari di keduanya, tapi lebih konsisten di 'content'
   const plain = docs.value.filter(d =>
     (d.content || '').toLowerCase().includes(processedQuery.toLowerCase()) ||
-    (d.title || '').toLowerCase().includes(rawQuery.toLowerCase()) // Judul bisa pakai query mentah
+    (d.title || '').toLowerCase().includes(rawQuery.toLowerCase())
   )
   results.value = plain
 }

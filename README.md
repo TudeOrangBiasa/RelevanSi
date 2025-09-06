@@ -7,7 +7,7 @@ Uses Nuxt (Vue 3), TailwindCSS for UI, Lunr + Fuse.js for client-side retrieval,
 - Upload documents (TXT only, no text extraction)
 - Simple preprocessing (lowercase, stopwords, light stemming)
 - Client-side indexing: Lunr (primary) + Fuse.js (fallback)
-- Supabase table `documents` stores: id, title, content, created_at, processed, metadata
+- Supabase table `documents` stores: id, title, content(katalog), content_raw, created_at, processed, metadata
 - Seeder with 30 sample documents (processed = true)
 
 ## Tech stack
@@ -20,12 +20,14 @@ Uses Nuxt (Vue 3), TailwindCSS for UI, Lunr + Fuse.js for client-side retrieval,
 ## Schema
 ```ts
 export interface Document {
-    id: number;
-    title: string;
-    content: string;
-    created_at: Date;
-    processed: boolean;
-    metadata: Record<string, any>;
+  id: string;                       
+  title: string;
+  file_url: string;
+  content: string;
+  content_raw?: string;
+  created_at: Date;
+  processed: boolean;
+  metadata: Record<string, any>;
 }
 ```
 
@@ -33,7 +35,7 @@ export interface Document {
 - Upload documents (TXT only)
 - Simple preprocessing (lowercase, stopwords, light stemming)
 - Client-side indexing (Lunr) and Fuse.js fallback
-- Supabase table documents stores content, processed flag, and metadata (word_count, excerpt, language, file_size, uploadedAt)
+- Supabase table documents stores content(katalog), content_raw , processed flag, and metadata (word_count, excerpt, language, file_size, uploadedAt)
 
 ## Requirements
 - Node.js >= 18

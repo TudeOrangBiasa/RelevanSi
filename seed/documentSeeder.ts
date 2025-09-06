@@ -283,6 +283,13 @@ async function main() {
     "file_url": "seed/sql-opt.txt",
     "lang": "en",
     "file_size": 1400
+  },
+  {
+    "title": "Keamanan Jaringan",
+    "raw": "Keamanan jaringan adalah praktik melindungi jaringan komputer dari intrusi, penyalahgunaan, atau akses tidak sah. Salah satu konsep dasar adalah firewall, yang bertindak sebagai penghalang antara jaringan internal yang aman dan jaringan eksternal yang tidak aman (seperti internet). Firewall dapat dikonfigurasi untuk mengizinkan atau memblokir lalu lintas berdasarkan aturan yang ditentukan, seperti alamat IP sumber, port tujuan, atau protokol. Ini tidak hanya membantu mencegah akses tidak sah tetapi juga menambah lapisan keamanan dengan menyembunyikan struktur jaringan internal dari dunia luar. Untuk komunikasi aman melalui jaringan yang tidak aman seperti internet, VPN (Virtual Private Network) menciptakan 'terowongan' virtual yang terenkripsi. Semua data yang melewati terowongan ini dilindungi dari penyadapan. Enkripsi itu sendiri, yang paling sering diimplementasikan dengan protokol TLS (Transport Layer Security), adalah proses mengubah data menjadi format yang tidakdapat dibaca tanpa kunci dekripsi yang sesuai. Ini memastikan bahwa bahkan jika data dicegat, itu tidak dapat dimengerti oleh pihak yang tidak berwenang.",
+    "file_url": "seed/network-security.txt",
+    "lang": "id",
+    "file_size": 1550
   }
 ]
   
