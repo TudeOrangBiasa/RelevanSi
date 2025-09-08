@@ -5,16 +5,18 @@ import { preprocess, detectLanguageFromText } from './preprocessing'
 type Lang = 'id' | 'en'
 
 export async function uploadDocument(file: File, supabase: SupabaseClient) {
-  // 1) extract raw text (do NOT modify this)
+  // 1. Ekstrak teks mentah dari file
   const raw = await extractText(file)
-  const originalRaw = String(raw || '') // defensive copy
+  const originalRaw = String(raw || '')
 
-  // 2) detect language and preprocess immediately
+  // 2. Deteksi bahasa dokumen
   const lang = detectLanguageFromText(originalRaw) as Lang
+
+  // 3. Preprocess teks untuk indexing/search
   const processed = preprocess(originalRaw || '', lang)
   const word_count = processed ? processed.split(/\s+/).filter(Boolean).length : 0
 
-  // 3) prepare metadata and payload including processed content
+  // 4. Siapkan metadata
   const initialMeta = {
     uploadedAt: new Date().toISOString(),
     language: lang,
@@ -25,17 +27,18 @@ export async function uploadDocument(file: File, supabase: SupabaseClient) {
     full_text: originalRaw
   }
 
+  // 5. Siapkan payload untuk database
   const payload = {
     title: file.name,
     file_url: file.name,
-    content_raw: originalRaw, // original untouched text
-    content: processed,       // preprocessed content for indexing
+    content_raw: originalRaw,
+    content: processed,
     processed: true,
     metadata: initialMeta,
     created_at: new Date().toISOString()
   }
 
-  // 4) insert row (store raw + processed in one go)
+  // 6. Simpan ke Supabase
   const { data: insData, error: insErr } = await supabase
     .from('documents')
     .insert([payload])
@@ -46,9 +49,8 @@ export async function uploadDocument(file: File, supabase: SupabaseClient) {
   const inserted = insData as any
   const rowId = inserted?.id
 
-  // 5) defensive: if DB returned content_raw different from original, correct it
+  // 7. Pastikan content_raw di database sama dengan hasil ekstraksi
   if (inserted && typeof inserted.content_raw === 'string' && inserted.content_raw !== originalRaw) {
-    console.warn('uploadDocument: content_raw in DB differs from original extracted raw — correcting.')
     const { error: fixErr } = await supabase
       .from('documents')
       .update({ content_raw: originalRaw })

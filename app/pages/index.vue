@@ -157,10 +157,9 @@
           </div>
 
           <div class="flex gap-4 items-center">
-            <input type="file" @change="handleFileSelect" accept=".txt" class="flex-1 px-4 py-3 rounded-2xl border-none bg-[#242938]/80 text-gray-200" />
+            <input type="file" @change="handleFileSelect" accept=".txt,.pdf,.doc,.docx" class="flex-1 px-4 py-3 rounded-2xl border-none bg-[#242938]/80 text-gray-200" />
             <button
-              @click="onUploadClick"
-              :disabled="!selectedFile || isUploading"
+              @click="saveToSupabase" :disabled="isUploading || !selectedFile"
               class="px-6 py-3 rounded-2xl bg-gradient-to-r from-green-500/20 to-blue-500/20 text-green-300 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <span v-if="isUploading" class="inline-flex items-center gap-2">
@@ -209,7 +208,7 @@ const particles = ref<Array<any>>([])
 const selectedFile = ref<File | null>(null)
 const uploadStatus = ref('')
 const showUploadModal = ref(false)
-const isUploading = ref(false) // prevents double uploads
+const isUploading = ref(false)
 let lunrIndex: any = null
 let fuseIndex: any = null
 
@@ -261,7 +260,6 @@ async function loadDocuments() {
 
   docs.value = (data || []) as DocumentItem[]
 
-  // Dynamic import of indexing functions to avoid bundling node-only deps into SSR/client bundle
   if (typeof window !== 'undefined') {
     try {
       const lunrMod = await import('~/composables/lunr')
@@ -307,7 +305,7 @@ function handleFileSelect(event: Event) {
   }
 }
 
-async function onUploadClick() {
+async function saveToSupabase() {
   if (!selectedFile.value) return
   if (isUploading.value) return
 
@@ -318,11 +316,11 @@ async function onUploadClick() {
     if (typeof window === 'undefined') {
       throw new Error('Upload must be performed in browser')
     }
-    const mod = await import('~/composables/uploudDocument')
-    if (!mod || typeof mod.uploadDocument !== 'function') {
-      throw new Error('uploadDocument module not available')
+    const mod = await import('~/composables/uploadAndSave')
+    if (!mod || typeof mod.uploadAndSave !== 'function') {
+      throw new Error('uploadAndSave module not available')
     }
-    const inserted = await mod.uploadDocument(selectedFile.value, supabase)
+    const inserted = await mod.uploadAndSave(selectedFile.value, supabase)
 
     console.log('uploaded document', {
       id: inserted?.id,
@@ -357,15 +355,15 @@ function searchDocs() {
     return
   }
 
-  // detect language from query (safe, lightweight)
   const lang = detectLanguageFromText(rawQuery)
+
+  // Prioritas pencarian: 
+  // 1. Lunr search (primary)
+  // 2. Fuse search (fallback)
+  // 3. Simple text search (fallback terakhir)
+
+  // 1. Coba Lunr search terlebih dahulu
   const processedQuery = preprocess(rawQuery, lang)
-
-  if (!processedQuery) {
-    results.value = []
-    return
-  }
-
   if (lunrIndex) {
     try {
       const lunrHits = lunrIndex.search(processedQuery)
@@ -379,6 +377,7 @@ function searchDocs() {
     }
   }
 
+  // 2. Fallback ke Fuse
   if (fuseIndex) {
     try {
       const fuseHits = fuseIndex.search(processedQuery)
@@ -392,6 +391,7 @@ function searchDocs() {
     }
   }
 
+  // 4. Simple text search sebagai fallback terakhir
   const plain = docs.value.filter(d =>
     (d.content || '').toLowerCase().includes(processedQuery.toLowerCase()) ||
     (d.title || '').toLowerCase().includes(rawQuery.toLowerCase())

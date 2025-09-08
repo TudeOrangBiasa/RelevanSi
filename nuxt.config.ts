@@ -8,6 +8,14 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  nitro: {
+    experimental: {
+      wasm: true
+    },
+    rollupConfig: {
+      external: ['pdf-parse']
+    }
+  },
   runtimeConfig: {
     public: {
       SUPABASE_URL: process.env.SUPABASE_URL,
