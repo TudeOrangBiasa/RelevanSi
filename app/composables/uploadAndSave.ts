@@ -1,6 +1,7 @@
 import { uploadFile } from './uploadFile'
 import { extractText } from './extractText'
 import { preprocess, detectLanguageFromText } from './preprocessing'
+import { extractTitleFromContent } from './titleExtractor'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 type Lang = 'id' | 'en'
@@ -8,6 +9,7 @@ type Lang = 'id' | 'en'
 export async function uploadAndSave(file: File, supabase: SupabaseClient) {
   const ext = (file.name || '').split('.').pop()?.toLowerCase() || ''
   let rawText = ''
+  let extractedTitle = ''
   
   // Untuk PDF/DOCX, ekstrak di server dulu
   if (ext === 'pdf' || ext === 'docx') {
@@ -16,10 +18,14 @@ export async function uploadAndSave(file: File, supabase: SupabaseClient) {
       throw new Error(serverResult.error || 'Ekstraksi file gagal')
     }
     rawText = serverResult.preview || ''
+    extractedTitle = serverResult.title || '' // Judul sudah diekstrak di server
   } 
   // Untuk TXT, ekstrak langsung di client
   else if (ext === 'txt') {
     rawText = await extractText(file)
+    // Ekstrak judul dari isi file TXT
+    const originalFilename = file.name.replace(/\.[^/.]+$/, '')
+    extractedTitle = extractTitleFromContent(rawText, originalFilename)
   } 
   else {
     throw new Error('Format file tidak didukung. Hanya .txt, .pdf, .docx yang diizinkan.')
@@ -28,6 +34,11 @@ export async function uploadAndSave(file: File, supabase: SupabaseClient) {
   // Jika rawText kosong, tolak
   if (!rawText || rawText.trim().length === 0) {
     throw new Error('File kosong atau tidak bisa diekstrak')
+  }
+
+  // Jika ekstraksi judul gagal, gunakan nama file sebagai fallback
+  if (!extractedTitle || extractedTitle.trim().length === 0) {
+    extractedTitle = file.name.replace(/\.[^/.]+$/, '')
   }
 
   // Deteksi bahasa dan preprocess
@@ -43,12 +54,14 @@ export async function uploadAndSave(file: File, supabase: SupabaseClient) {
     excerpt: rawText.slice(0, 300),
     file_name: file.name,
     file_size: file.size ?? null,
-    full_text: rawText
+    full_text: rawText,
+    extracted_title: extractedTitle, // Simpan judul yang diekstrak
+    title_source: extractedTitle !== file.name.replace(/\.[^/.]+$/, '') ? 'content' : 'filename'
   }
 
   // Simpan ke Supabase
   const payload = {
-    title: file.name.replace(/\.[^/.]+$/, ''), // hapus ekstensi
+    title: extractedTitle, // Gunakan judul yang diekstrak
     file_url: file.name,
     content_raw: rawText,
     content: processed,

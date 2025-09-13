@@ -25,3 +25,18 @@ export function createLunrIndex(docs) {
     })
   })
 }
+
+export function searchWithLunr(lunrIndex, docs, query) {
+  if (!lunrIndex || !query) return []
+  
+  try {
+    const lunrHits = lunrIndex.search(query)
+    return lunrHits.map(hit => {
+      const doc = docs.find(d => String(d.id) === String(hit.ref))
+      return doc ? { ...doc, score: hit.score } : null
+    }).filter(Boolean)
+  } catch (e) {
+    console.warn('lunr search failed', e)
+    return []
+  }
+}

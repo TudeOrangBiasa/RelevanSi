@@ -125,7 +125,19 @@
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <h4 class="text-xl font-semibold text-gray-100 mb-2">{{ doc.title }}</h4>
+                  <div class="flex items-start justify-between mb-2">
+                    <h4 class="text-xl font-semibold text-gray-100 flex-1">{{ doc.title }}</h4>
+                    <div v-if="doc.score !== undefined" class="ml-4 flex items-center gap-2">
+                      <div class="flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30">
+                        <svg class="w-4 h-4 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        <span class="text-sm font-medium text-blue-300">
+                          {{ (doc.score * 100).toFixed(1) }}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                   <p class="text-gray-400 leading-relaxed text-sm">
                     {{ (doc.metadata?.excerpt ?? (doc.content || '')).slice(0, 300) }}{{ ((doc.metadata?.excerpt ?? (doc.content || '')).length > 300) ? '...' : '' }}
                   </p>
@@ -196,6 +208,7 @@ interface DocumentItem {
   created_at: string | Date
   processed: boolean
   metadata?: Record<string, any>
+  score?: number
 }
 
 const supabase: any = useSupabaseClient()
@@ -346,7 +359,7 @@ async function saveToSupabase() {
   }
 }
 
-function searchDocs() {
+async function searchDocs() {
   searched.value = true
   const rawQuery = query.value && query.value.trim()
 
@@ -356,42 +369,67 @@ function searchDocs() {
   }
 
   const lang = detectLanguageFromText(rawQuery)
+  const processedQuery = preprocess(rawQuery, lang)
 
   // Prioritas pencarian: 
-  // 1. Lunr search (primary)
-  // 2. Fuse search (fallback)
-  // 3. Simple text search (fallback terakhir)
+  // 1. TF-IDF search (primary - with scores)
+  // 2. Lunr search (fallback - with scores)
+  // 3. Fuse search (fallback - with scores)
+  // 4. Simple text search (fallback terakhir - no scores)
 
-  // 1. Coba Lunr search terlebih dahulu
-  const processedQuery = preprocess(rawQuery, lang)
+  // 1. Coba TF-IDF search terlebih dahulu
+  try {
+    if (typeof window !== 'undefined') {
+      const mod = await import('~/composables/searchTfIdf')
+      if (mod && typeof mod.searchWithTfIdf === 'function') {
+        const tfidfResults = mod.searchWithTfIdf(docs.value, rawQuery, lang)
+        if (tfidfResults.length > 0) {
+          results.value = tfidfResults
+          return
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('TF-IDF search failed', e)
+  }
+
+  // 2. Coba Lunr search
   if (lunrIndex) {
     try {
-      const lunrHits = lunrIndex.search(processedQuery)
-      const lunrResults = lunrHits.map((r: { ref: string }) => docs.value.find(d => String(d.id) === String(r.ref))).filter(Boolean)
-      if (lunrResults.length > 0) {
-        results.value = lunrResults as DocumentItem[]
-        return
+      if (typeof window !== 'undefined') {
+        const lunrMod = await import('~/composables/lunr')
+        if (lunrMod && typeof lunrMod.searchWithLunr === 'function') {
+          const lunrResults = lunrMod.searchWithLunr(lunrIndex, docs.value, processedQuery)
+          if (lunrResults.length > 0) {
+            results.value = lunrResults
+            return
+          }
+        }
       }
     } catch (e) {
       console.warn('lunr search failed', e)
     }
   }
 
-  // 2. Fallback ke Fuse
+  // 3. Fallback ke Fuse
   if (fuseIndex) {
     try {
-      const fuseHits = fuseIndex.search(processedQuery)
-      const fuseResults = fuseHits.map((res: { item: DocumentItem }) => res.item)
-      if (fuseResults.length > 0) {
-        results.value = fuseResults
-        return
+      if (typeof window !== 'undefined') {
+        const fuseMod = await import('~/composables/fuse')
+        if (fuseMod && typeof fuseMod.searchWithFuse === 'function') {
+          const fuseResults = fuseMod.searchWithFuse(fuseIndex, processedQuery)
+          if (fuseResults.length > 0) {
+            results.value = fuseResults
+            return
+          }
+        }
       }
     } catch (e) {
-      console.warn('fuse fallback failed', e)
+      console.warn('fuse search failed', e)
     }
   }
 
-  // 4. Simple text search sebagai fallback terakhir
+  // 4. Simple text search sebagai fallback terakhir (tanpa score)
   const plain = docs.value.filter(d =>
     (d.content || '').toLowerCase().includes(processedQuery.toLowerCase()) ||
     (d.title || '').toLowerCase().includes(rawQuery.toLowerCase())

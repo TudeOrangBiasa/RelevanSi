@@ -13,3 +13,18 @@ export function createFuseIndex(docs) {
   }
   return new Fuse(docs, options)
 }
+
+export function searchWithFuse(fuseIndex, query) {
+  if (!fuseIndex || !query) return []
+  
+  try {
+    const fuseHits = fuseIndex.search(query)
+    return fuseHits.map(hit => ({
+      ...hit.item,
+      score: 1 - hit.score // Convert Fuse score (lower is better) to similarity score (higher is better)
+    }))
+  } catch (e) {
+    console.warn('fuse search failed', e)
+    return []
+  }
+}
